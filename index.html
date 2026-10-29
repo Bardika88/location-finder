@@ -1,0 +1,179 @@
+
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>مکان‌یاب پیشرفته</title>
+  <style>
+    body {
+      font-family: Tahoma, sans-serif;
+      max-width: 650px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #101827;
+      color: white;
+      text-align: center;
+    }
+    button {
+      padding: 12px 22px;
+      border: 0;
+      border-radius: 10px;
+      cursor: pointer;
+      background: #38bdf8;
+      font-size: 16px;
+    }
+    #result {
+      margin-top: 25px;
+      line-height: 2.2;
+      overflow-wrap: anywhere;
+      text-align: right;
+    }
+    a { color: #38bdf8; }
+    .card {
+      background: #1e293b;
+      padding: 16px;
+      border-radius: 12px;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <h2>📍 مکان‌یاب پیشرفته</h2>
+  <p>با اجازهٔ کاربر، موقعیت دستگاه دریافت می‌شود.</p>
+  <button id="locate" onclick="getLocation()">
+    پیدا کردن موقعیت
+  </button>
+  <div id="result"></div>
+
+  <script>
+    const result = document.getElementById("result");
+    const button = document.getElementById("locate");
+
+    function escapeHTML(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[char]);
+    }
+
+    function getLocation() {
+      if (!navigator.geolocation) {
+        result.textContent = "مرورگر از مکان‌یابی پشتیبانی نمی‌کند.";
+        return;
+      }
+
+      button.disabled = true;
+      result.textContent = "در حال دریافت مختصات...";
+
+      navigator.geolocation.getCurrentPosition(
+        async position => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          const accuracy = Math.round(position.coords.accuracy);
+
+          result.innerHTML = `
+            <div class="card">
+              <b>مختصات:</b> ${lat}, ${lon}<br>
+              <b>شعاع خطای تخمینی:</b> ${accuracy} متر<br>
+              <b>آدرس:</b> در حال جست‌وجو...
+            </div>
+          `;
+
+          try {
+            const url = new URL(
+              "https://nominatim.openstreetmap.org/reverse"
+            );
+            url.search = new URLSearchParams({
+              format: "jsonv2",
+              lat: String(lat),
+              lon: String(lon),
+              zoom: "18",
+              addressdetails: "1",
+              "accept-language": "fa"
+            });
+
+            const response = await fetch(url);
+
+            if (!response.ok) {
+              throw new Error("خطای سرویس آدرس‌یابی: " + response.status);
+            }
+
+            const data = await response.json();
+            const a = data.address || {};
+
+            const street = a.road || a.pedestrian ||
+                           a.residential || a.neighbourhood || "نامشخص";
+            const neighborhood = a.neighbourhood ||
+                                 a.suburb || a.quarter || "نامشخص";
+            const city = a.city || a.town ||
+                         a.city_district || a.village || "نامشخص";
+            const province = a.state || "نامشخص";
+            const postcode = a.postcode || "ثبت نشده";
+
+            result.innerHTML = `
+              <div class="card">
+                <b>خیابان:</b> ${escapeHTML(street)}<br>
+                <b>محله:</b> ${escapeHTML(neighborhood)}<br>
+                <b>شهر:</b> ${escapeHTML(city)}<br>
+                <b>استان:</b> ${escapeHTML(province)}<br>
+                <b>کد پستی:</b> ${escapeHTML(postcode)}<br>
+                <b>شعاع خطای تخمینی:</b> ${accuracy} متر<br>
+                <b>مختصات:</b> ${lat}, ${lon}<br><br>
+                <a href="https://www.google.com/maps?q=${lat},${lon}"
+                   target="_blank" rel="noopener">
+                  مشاهده موقعیت در گوگل‌مپ
+                </a><br>
+                <a href="${escapeHTML(data.display_name ?
+                  'https://www.openstreetmap.org/?mlat=' +
+                  encodeURIComponent(lat) + '&mlon=' +
+                  encodeURIComponent(lon) + '#map=18/' +
+                  encodeURIComponent(lat) + '/' +
+                  encodeURIComponent(lon) : '#')}"
+                   target="_blank" rel="noopener">
+                  مشاهده در OpenStreetMap
+                </a>
+              </div>
+            `;
+          } catch (error) {
+            result.innerHTML += `
+              <div class="card">
+                موقعیت دریافت شد، اما آدرس قابل دریافت نیست.<br>
+                ${escapeHTML(error.message)}<br>
+                ممکن است سرویس آدرس‌یابی یا اتصال شبکه در دسترس نباشد.
+              </div>
+            `;
+          } finally {
+            button.disabled = false;
+          }
+        },
+        error => {
+          const messages = {
+            1: "اجازه دسترسی به موقعیت داده نشد.",
+            2: "موقعیت دستگاه قابل تشخیص نیست.",
+            3: "زمان دریافت موقعیت تمام شد."
+          };
+          result.textContent =
+            messages[error.code] || error.message;
+          button.disabled = false;
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 25000,
+          maximumAge: 0
+        }
+      );
+    }
+  </script>
+
+  <p style="font-size:12px;color:#94a3b8">
+    اطلاعات آدرس از OpenStreetMap است.
+    <a href="https://www.openstreetmap.org/copyright">
+      حق نشر و شرایط استفاده
+    </a>
+  </p>
+</body>
+</html>
